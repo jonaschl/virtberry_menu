@@ -4,6 +4,9 @@ from virtberry_module_management import *
 import json
 from flask import current_app
 
+
+PathToNormalConfigFile = "/etc/virtberry/config.json"
+
 def get_url(entry):
     if not entry.get("parent"):
         # we are in the first stage we need a absolute url
@@ -58,12 +61,16 @@ def build_menu_item_placeholder(index):
 
 
 def add_to_menu(menu, item, parent, stage):
+    # parent is empyt in first stage, has one item in seconde and two in third stage
     if stage == len(parent) +1 :
         # we are in the last stage where we have to add the item
         #check for placeholders
         for entry in menu:
             if entry.get("index") == item.get("index"):
                 # The place holder can have childs, so we need to add these childs to the item
+                print("")
+                print("Found placeholder to update")
+                print("")
                 child = {}
                 child.setdefault("child", entry.get("child"))
                 item.update(child)
@@ -80,11 +87,17 @@ def add_to_menu(menu, item, parent, stage):
             entry = menu[-1]
             menu = entry.get("child")
         else:
+            check = 0
             for entry in menu:
                 if entry.get("index") == parent[ stage - 1 ]:
                     menu = entry.get("child")
+                    # we found the entry in the current menu so check is 1
+                    check = 1
                     print("gethere3")
-                else:
+                    break
+
+            # check is only one if we found the index in the current menu
+            if check == 0:
                     menu.append(build_menu_item_placeholder(parent[ stage - 1 ]))
                     print("get here2")
                     print(build_menu_item_placeholder(parent[ stage - 1 ]))
@@ -125,19 +138,41 @@ def from_relative_to_absolute_url(menu, url):
     return
 
 def build_menu():
+
+    real_menu = []
+    # get the menu from the modules
     for module in get_enabled_modules():
         the_module = virtberry_module(module)
+        print(the_module.name)
         menu = the_module.get_attributes("menu")
-        real_menu = []
+        print(json.dumps(menu))
+        print("")
+
+        for entry in menu:
+            print("Add entry to menu")
+            add_to_menu(real_menu ,build_menu_item(entry) ,entry.get("parent"), 1)
+            print("real_menu is now:")
+            print(json.dumps(real_menu))
+            print("")
+
+    #get the menu from the flask config
+    with open(PathToNormalConfigFile) as file:
+        data = json.load(file)
+        menu = data.get("menu", {})
         for entry in menu:
             add_to_menu(real_menu,build_menu_item(entry),entry.get("parent"), 1)
 
-        if check_for_placeholder(real_menu) == 1:
-            print("placeholders in menu")
-            exit(1)
+    print("")
+    print(json.dumps(real_menu))
+    print("")
+    # after we added everything we check for placeholders
+    if check_for_placeholder(real_menu) == 1:
+        print("placeholders in menu")
+        print(json.dumps(real_menu))
+        exit(1)
 
-        from_relative_to_absolute_url(real_menu,"")
-        return real_menu
+    from_relative_to_absolute_url(real_menu,"")
+    return real_menu
 
 def menu_context_processor():
     return dict(menu=current_app.menu.the_menu)
